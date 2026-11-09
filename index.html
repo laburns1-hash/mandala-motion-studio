@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mandala Motion Studio</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#e5edf4;background:#0b121b}*{box-sizing:border-box}body{margin:0}header{padding:18px 24px;border-bottom:1px solid #2c3b4a;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h1{font-size:21px;margin:0}small{color:#a1b3c2}main{display:grid;grid-template-columns:minmax(250px,320px) minmax(320px,1fr);gap:18px;padding:18px;max-width:1500px;margin:auto}.panel{background:#14202c;border:1px solid #293b4a;border-radius:14px;padding:16px}h2{font-size:16px;margin:0 0 14px}label{display:block;font-size:13px;color:#c3d2df;margin:12px 0 4px}input,select,button{font:inherit}input[type=number],select{width:100%;padding:9px;background:#0c1721;color:#e5edf4;border:1px solid #3a4e5e;border-radius:7px}button{cursor:pointer;background:#285b73;border:1px solid #4986a1;color:white;padding:9px 12px;border-radius:8px}button:hover{background:#377c99}button:disabled{opacity:.4;cursor:default}.controls{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.stage{min-width:0}#canvas{display:block;width:100%;height:min(63vh,650px);background:#f9f8f3;border-radius:9px}#variants{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.variant{padding:5px;background:#0d1722;border:1px solid #3a4e5e}.variant.selected{outline:2px solid #85d9ed}.variant svg{width:100%;aspect-ratio:1}.status{font-size:12px;color:#a4b5c5;margin:8px 0}.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}input[type=range]{width:100%}@media(max-width:850px){main{grid-template-columns:1fr}#canvas{height:48vh}}
+</style>
+</head>
+<body>
+<header><div><h1>Mandala Motion Studio</h1><small>Precision drawing · Variation Explorer · v0.1</small></div><div class="buttons"><button id="save">Save project</button><button id="open">Open project</button><button id="svg">Export SVG</button><input id="file" type="file" accept=".mandala,.json" hidden></div></header>
+<main>
+<section class="panel"><h2>Design controls</h2><div class="controls" id="controls"></div><h2>Paper &amp; pen</h2><div class="controls" id="paper"></div><p class="status">Nib diameter is a physical millimetre measurement; changing paper size will not automatically change your pen.</p><h2>Variation settings</h2><label for="strength">Variation strength <span id="strengthValue">20%</span></label><input id="strength" type="range" min="0" max="100" value="20"><div class="buttons"><button id="generate">Generate 9 variations</button><button id="refine" disabled>Refine selected</button><button id="back" disabled>Previous design</button></div><p id="status" class="status">Mechanical feasibility: not yet verified for a physical rotor machine. XY plotter export is supported as SVG.</p></section>
+<section class="stage"><div class="panel"><h2>Current design</h2><svg id="canvas" role="img" aria-label="Current generated mandala"></svg></div><div class="panel" style="margin-top:16px"><h2>Variation Explorer</h2><div id="variants"></div><p class="status">Choose a variation and click Refine selected. Previous designs are preserved in this session.</p></div></section>
+</main>
+<script type="module" src="./src/app.js"></script>
+</body></html>
