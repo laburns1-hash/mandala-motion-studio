@@ -1,0 +1,11 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {DEFAULT_DESIGN,pointAt,samplePath,fitToPaper,exportSVG,recommendNib,serializeProject,deserializeProject} from "../src/engine.js";
+import {makeVariations,branch} from "../src/variations.js";
+test("geometry begins at expected point",()=>{const p=pointAt(DEFAULT_DESIGN,0);assert.equal(p.x,58);assert.equal(p.y,0);});
+test("counter-rotating fractional speeds produce finite samples",()=>{const d={...DEFAULT_DESIGN,speedA:1.25,speedB:-3.5};const p=samplePath(d,{maxSegments:1500});assert.equal(p.length,1501);assert.ok(p.every(q=>Number.isFinite(q.x)&&Number.isFinite(q.y)));});
+test("fit stays inside physical margins including nib",()=>{const d=DEFAULT_DESIGN;const p=fitToPaper(samplePath(d,{maxSegments:1200}),d);assert.ok(p.every(q=>q.x>=d.marginMm&&q.x<=d.paperWidthMm-d.marginMm&&q.y>=d.marginMm&&q.y<=d.paperHeightMm-d.marginMm));});
+test("SVG has physical units",()=>{const s=exportSVG(DEFAULT_DESIGN,{maxSegments:1200});assert.match(s,/width="210mm"/);assert.match(s,/height="297mm"/);assert.match(s,/stroke-width="0.3"/);});
+test("paper change retains physical nib",()=>{const r=recommendNib(0.3,{width:210,height:297},{width:297,height:420});assert.equal(r.retainMm,0.3);assert.ok(r.proportionalMm>0.42&&r.proportionalMm<0.43);});
+test("project roundtrip preserves parameters",()=>{const p=deserializeProject(serializeProject(DEFAULT_DESIGN));assert.deepEqual(p.design,DEFAULT_DESIGN);});
+test("variation seed repeatable and parent unmodified",()=>{const a=makeVariations(DEFAULT_DESIGN,{seed:42});const b=makeVariations(DEFAULT_DESIGN,{seed:42});assert.deepEqual(a,b);const parent={id:"root",design:DEFAULT_DESIGN};const child=branch(parent,a[0],"child");assert.equal(child.parentId,"root");assert.notEqual(child.design,parent.design);});
