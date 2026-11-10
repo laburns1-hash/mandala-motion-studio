@@ -47,3 +47,29 @@ export function sampleFiveBar(d,{duration=2*Math.PI,segments=2400}={}){
  if(current.length>1)paths.push(current);
  return {paths,unreachable,singular,samples:segments+1};
 }
+
+/**
+ * Advance both motors together, never accepting a disconnected pen pose.
+ * A segment is checked in increments to avoid jumping across an invalid region.
+ * Returns the last reachable pose and a blocked flag. This is a kinematic
+ * constraint, not a full collision/velocity/torque model.
+ */
+export function advanceFiveBar(d,fromA,fromB,toA,toB,{maxAngleStep=0.01,clearance=1e-6}={}){
+ validateFiveBar(d);
+ for(const x of [fromA,fromB,toA,toB,maxAngleStep,clearance])if(!Number.isFinite(x))throw new RangeError("Nonfinite motion parameter");
+ if(maxAngleStep<=0||clearance<0)throw new RangeError("Invalid motion limits");
+ const valid=s=>s.reachable&&!s.singular&&Math.hypot(s.elbowB.x-s.elbowA.x,s.elbowB.y-s.elbowA.y)>clearance;
+ let last=solveFiveBar(d,fromA,fromB);
+ if(!valid(last))return {accepted:false,blocked:true,reason:"invalid-start",angleA:fromA,angleB:fromB,pose:last};
+ const steps=Math.max(1,Math.ceil(Math.max(Math.abs(toA-fromA),Math.abs(toB-fromB))/maxAngleStep));
+ if(steps>200000)throw new RangeError("Motion requires too many steps");
+ for(let i=1;i<=steps;i++){
+  const fraction=i/steps,a=fromA+(toA-fromA)*fraction,b=fromB+(toB-fromB)*fraction;
+  const next=solveFiveBar(d,a,b);
+  if(!valid(next)){
+   return {accepted:false,blocked:true,reason:next.reason??"singularity",angleA:last.thetaA,angleB:last.thetaB,pose:last};
+  }
+  last=next;
+ }
+ return {accepted:true,blocked:false,angleA:toA,angleB:toB,pose:last};
+}
