@@ -60,11 +60,7 @@ $("generate").addEventListener("click",generate);
 $("refine").addEventListener("click",()=>{
   if(selected<0)return;
   history.push({...design});design={...variants[selected].design};
-  updateInputs();refreshArmature=mountArmature($("armature"),()=>design,patch=>{
-  const next={...design,...patch};
-  try{design=next;updateInputs();render();}catch(e){console.warn("Armature update rejected",e);}
-});
-render();generate();
+  updateInputs();render();generate();
 });
 $("back").addEventListener("click",()=>{if(!history.length)return;design=history.pop();updateInputs();render();generate();});
 function download(name,content,type){
@@ -80,4 +76,5 @@ $("file").addEventListener("change",async e=>{
   catch(err){alert("Could not open project: "+err.message);}
   e.target.value="";
 });
+refreshArmature=mountArmature($("armature"),()=>design,patch=>{const old=design;try{design={...design,...patch};updateInputs();render();}catch(e){design=old;updateInputs();console.warn(e);}});
 render();generate();
