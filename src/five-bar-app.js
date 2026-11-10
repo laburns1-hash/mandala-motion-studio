@@ -70,7 +70,7 @@ function frame(now){
 for(const [key] of keys)$(key).addEventListener("input",e=>{
  stop();const v=Number(e.target.value);
  if(key==="angleA"||key==="angleB"){updateAngles(key==="angleA"?v*RAD:d.angleA,key==="angleB"?v*RAD:d.angleB);trace=[];draw();}
- else change({[key]:v});e.target.value=d[key];draw();
+ else {change({[key]:v});e.target.value=d[key];draw();}
 });
 // Inverse kinematics for dragging the shared pen: intersect each motor's
 // crank circle with the circle of elbow locations around the requested pen.
@@ -97,11 +97,12 @@ function dragPen(target){
   candidates.push({a,b,score:Math.hypot(a-d.angleA,b-d.angleB)});
  }
  candidates.sort((a,b)=>a.score-b.score);
+ let accepted=false;
  for(const candidate of candidates){
   const step=advanceFiveBar(d,d.angleA,d.angleB,candidate.a,candidate.b,{maxAngleStep:.006});
-  if(step.accepted){d={...d,angleA:step.angleA,angleB:step.angleB};blocked=false;break;}
+  if(step.accepted){d={...d,angleA:step.angleA,angleB:step.angleB};blocked=false;accepted=true;break;}
  }
- if(blocked||!candidates.length){blocked=true;return;}
+ if(!accepted){blocked=true;return;}
  }
 }
 $("machine").addEventListener("pointerdown",e=>{
