@@ -34,7 +34,9 @@ export function samplePath(d, options={}) {
   const duration=2*Math.PI*d.cycles;
   const maxVelocity=Math.abs(d.radiusA*d.speedA)+Math.abs(d.radiusB*d.speedB);
   const estimated=Math.ceil(duration*Math.max(maxVelocity,1)/maxStepMm);
-  const count=Math.max(512,Math.min(options.maxSegments ?? 150000,estimated));
+  const maxSegments=options.maxSegments ?? 150000;
+  if(!Number.isInteger(maxSegments)||maxSegments<2||maxSegments>200000) throw new RangeError("maxSegments must be an integer between 2 and 200000");
+  const count=Math.min(maxSegments,Math.max(512,estimated));
   const points=new Array(count+1);
   for(let i=0;i<=count;i++) points[i]=pointAt(d,duration*i/count);
   return points;
