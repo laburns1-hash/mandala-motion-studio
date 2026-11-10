@@ -1,7 +1,7 @@
 import {DEFAULT_FIVE_BAR,solveFiveBar,advanceFiveBar,scanMotorSeparation} from "./five-bar.js";
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg",RAD=Math.PI/180;
 let d={...DEFAULT_FIVE_BAR,angleA:120*RAD,angleB:60*RAD,speedB:-2},view="mechanism",playing=false,last=0,raf=0,drag=null,trace=[],blocked=false;
-const keys=[["baseSeparation","Motor separation",60,220,5],["crankA","Crank A",10,90,1],["crankB","Crank B",10,90,1],["couplerA","Coupler A",40,160,1],["couplerB","Coupler B",40,160,1],["speedA","Motor A speed",-6,6,.05],["speedB","Motor B speed",-6,6,.05],["angleA","Motor A angle",-180,180,1],["angleB","Motor B angle",-180,180,1]];
+const keys=[["motorAX","Motor A · X",-150,150,5],["motorAY","Motor A · Y",-120,120,5],["motorBX","Motor B · X",-150,150,5],["motorBY","Motor B · Y",-120,120,5],["crankA","Crank A",10,90,1],["crankB","Crank B",10,90,1],["couplerA","Coupler A",40,160,1],["couplerB","Coupler B",40,160,1],["speedA","Motor A speed",-6,6,.05],["speedB","Motor B speed",-6,6,.05],["angleA","Motor A angle",-180,180,1],["angleB","Motor B angle",-180,180,1]];
 const node=(tag,attrs={})=>{const e=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v));return e;};
 const controls=$("controls");
 for(const [key,label,min,max,step] of keys){const box=document.createElement("label"),span=document.createElement("span"),input=document.createElement("input");span.textContent=label;input.type="range";input.min=min;input.max=max;input.step=step;input.id=key;box.append(span,input);controls.append(box);}
@@ -63,7 +63,7 @@ $("machine").addEventListener("pointerdown",e=>{const h=e.target.dataset.handle;
 $("machine").addEventListener("pointermove",e=>{
  if(!drag)return;const svg=$("machine"),point=svg.createSVGPoint();point.x=e.clientX;point.y=e.clientY;
  const matrix=svg.getScreenCTM();if(!matrix)return;const p=point.matrixTransform(matrix.inverse()),base=drag==="A"?-d.baseSeparation/2:d.baseSeparation/2;
- const angle=Math.atan2(p.y,p.x-base);const old=drag==="A"?d.angleA:d.angleB;
+ const angle=Math.atan2(p.y-baseY,p.x-base);const old=drag==="A"?d.angleA:d.angleB;
  const delta=Math.atan2(Math.sin(angle-old),Math.cos(angle-old));
  updateAngles(d.angleA+(drag==="A"?delta:0),d.angleB+(drag==="B"?delta:0));trace=[];draw();
 });
@@ -72,7 +72,7 @@ document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",(
 document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{stop();const settings=b.dataset.preset==="balanced"?{...DEFAULT_FIVE_BAR,angleA:120*RAD,angleB:60*RAD,speedA:2,speedB:-2}:{...DEFAULT_FIVE_BAR,crankA:32,crankB:55,couplerA:110,couplerB:95,angleA:120*RAD,angleB:60*RAD,speedA:2.2,speedB:-3.4};d=settings;trace=[];blocked=false;draw();}));
 $("play").addEventListener("click",()=>{if(playing){stop();return;}playing=true;last=0;trace=[];$("play").textContent="Pause";raf=requestAnimationFrame(frame);});
 $("branch").addEventListener("click",()=>{stop();d={...d,branch:-d.branch};trace=[];draw();});
-$("fit").addEventListener("click",()=>{stop();const scan=scanMotorSeparation(d,{min:60,max:200,step:5,segments:200});const candidate={...d,baseSeparation:scan.best.separation};if(solveFiveBar(candidate).reachable){d=candidate;trace=[];draw();}});
+$("fit").addEventListener("click",()=>{stop();const scan=scanMotorSeparation(d,{min:60,max:200,step:5,segments:200});const mid=(d.motorAX+d.motorBX)/2;const candidate={...d,baseSeparation:scan.best.separation,motorAX:mid-scan.best.separation/2,motorBX:mid+scan.best.separation/2};if(solveFiveBar(candidate).reachable){d=candidate;trace=[];draw();}});
 $("export").addEventListener("click",()=>{
  const result=simulate();if(!result.complete){alert("Incomplete trajectory cannot be exported as a continuous drawing.");return;}
  const pts=result.paths.flat(),minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x)),minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
