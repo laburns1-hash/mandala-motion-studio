@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {rationalApprox,rotorClosure,trochoidPoint,trochoidClosure,harmonographPoint,sampleCurve} from "../src/curve-families.js";
+const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
+test("exact reduced integer ratio",()=>assert.deepEqual(rationalApprox(5/8).numerator,5));
+test("rotor closure for 5:-8",()=>{const c=rotorClosure(5,-8);assert.equal(c.closed,true);close(c.turns,1);});
+test("rotor closure for 1:sqrt2 is not certified",()=>assert.equal(rotorClosure(1,Math.SQRT2).closed,false));
+test("hypotrochoid begins at expected point",()=>{const p=trochoidPoint({fixedRadius:10,rollingRadius:3,penOffset:2,internal:true},0);close(p.x,9);close(p.y,0);});
+test("epitrochoid begins at expected point",()=>{const p=trochoidPoint({fixedRadius:10,rollingRadius:3,penOffset:2},0);close(p.x,11);close(p.y,0);});
+test("rolling-circle closure 10:3",()=>assert.equal(trochoidClosure(10,3).revolutions,3));
+test("undamped harmonograph remains finite",()=>{const p=harmonographPoint({},Math.PI);assert.ok(Number.isFinite(p.x)&&Number.isFinite(p.y));});
+test("sampling endpoints",()=>{const p=sampleCurve(t=>({x:t,y:0}),2,10);close(p[10].x,2);assert.equal(p.length,11);});
