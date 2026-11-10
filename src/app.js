@@ -1,6 +1,9 @@
 import {DEFAULT_DESIGN,samplePath,fitToPaper,pathData,exportSVG,serializeProject,deserializeProject} from "./engine.js";
 import {makeVariations} from "./variations.js";
+import {mountArmature} from "./armature.js";
+import {rotorClosure} from "./curve-families.js";
 let design={...DEFAULT_DESIGN},history=[],variants=[],selected=-1,seed=1;
+let refreshArmature=()=>{};
 const $=id=>document.getElementById(id);
 const fields=[
 ["radiusA","Rotor A radius (mm)",0,100,1],["radiusB","Rotor B radius (mm)",0,100,1],
@@ -38,6 +41,9 @@ function render(){
   const svg=makeSVG(design);$("canvas").replaceChildren(...svg.childNodes);
   $("canvas").setAttribute("viewBox",svg.getAttribute("viewBox"));
   $("back").disabled=!history.length;
+  refreshArmature();
+  const closure=rotorClosure(design.speedA,design.speedB);
+  $("status").textContent="Mechanical feasibility: unverified. Rotor closure: "+(closure.closed?(closure.turns===0?"stationary":"approximately "+Number(closure.turns.toFixed(5))+" exposure cycles"):"not certified within rational tolerance")+".";
 }
 function renderVariations(){
   const root=$("variants");root.replaceChildren();
@@ -54,7 +60,11 @@ $("generate").addEventListener("click",generate);
 $("refine").addEventListener("click",()=>{
   if(selected<0)return;
   history.push({...design});design={...variants[selected].design};
-  updateInputs();render();generate();
+  updateInputs();refreshArmature=mountArmature($("armature"),()=>design,patch=>{
+  const next={...design,...patch};
+  try{design=next;updateInputs();render();}catch(e){console.warn("Armature update rejected",e);}
+});
+render();generate();
 });
 $("back").addEventListener("click",()=>{if(!history.length)return;design=history.pop();updateInputs();render();generate();});
 function download(name,content,type){
