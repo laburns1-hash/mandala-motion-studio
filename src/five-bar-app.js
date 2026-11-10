@@ -1,6 +1,6 @@
 import {DEFAULT_FIVE_BAR,solveFiveBar,advanceFiveBar,scanMotorSeparation} from "./five-bar.js";
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg",RAD=Math.PI/180;
-let d={...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,angleA:120*RAD,angleB:60*RAD,speedB:-2},view="mechanism",playing=false,last=0,raf=0,drag=null,trace=[],blocked=false;
+let d={...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,angleA:120*RAD,angleB:60*RAD,speedB:-2},view="mechanism",playing=false,last=0,raf=0,drag=null,trace=[],blocked=false,simulationCache=null;
 const keys=[["motorAX","Motor A · X",-150,150,5],["motorAY","Motor A · Y",-120,120,5],["motorBX","Motor B · X",-150,150,5],["motorBY","Motor B · Y",-120,120,5],["crankA","Crank A",10,90,1],["crankB","Crank B",10,90,1],["couplerA","Coupler A",40,160,1],["couplerB","Coupler B",40,160,1],["speedA","Motor A speed",-6,6,.05],["speedB","Motor B speed",-6,6,.05],["angleA","Motor A angle",-180,180,1],["angleB","Motor B angle",-180,180,1]];
 const node=(tag,attrs={})=>{const e=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v));return e;};
 const controls=$("controls");
@@ -18,20 +18,29 @@ function change(patch){
   if(!pose.reachable||pose.singular){hitLimit=true;break;}
   accepted=candidate;
  }
- d=accepted;blocked=hitLimit;trace=[];draw();return !hitLimit;
+ d=accepted;blocked=hitLimit;trace=[];simulationCache=null;draw();return !hitLimit;
 }
 function updateAngles(a,b){const r=advanceFiveBar(d,d.angleA,d.angleB,a,b,{maxAngleStep:.008});d={...d,angleA:r.angleA,angleB:r.angleB};blocked=r.blocked;return r;}
 function draw(){
  for(const [key] of keys){const input=$(key);if(document.activeElement!==input)input.value=key.startsWith("angle")?Math.round(d[key]/RAD):d[key];}
  const p=current(),svg=$("machine");svg.replaceChildren();
  const line=(a,b,c,w)=>svg.append(node("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:c,"stroke-width":w,"stroke-linecap":"round"}));
- const circle=(q,c,r,handle)=>{const e=node("circle",{cx:q.x,cy:q.y,r,fill:c,stroke:"#fff","stroke-width":1.3});if(handle)e.dataset.handle=handle;svg.append(e);};
- if(p.reachable){line(p.baseA,p.elbowA,"#16b5d1",4);line(p.elbowA,p.pen,"#16b5d1",3);line(p.baseB,p.elbowB,"#e2a352",4);line(p.elbowB,p.pen,"#e2a352",3);circle(p.pen,"#f05e77",11,"pen");}
- circle(p.baseA,"#16b5d1",11,"originA");circle(p.baseB,"#e2a352",11,"originB");circle(p.elbowA,"#16b5d1",10,"A");circle(p.elbowB,"#e2a352",10,"B");
- $("machine-panel").hidden=view==="art";$("art-panel").classList.toggle("full",view==="art");
+ const circle=(q,c,r,handle)=>{
+  if(!q)return;
+  if(handle){const hit=node("circle",{cx:q.x,cy:q.y,r:24,fill:"transparent","data-handle":handle,style:"cursor:grab;touch-action:none"});svg.append(hit);}
+  const e=node("circle",{cx:q.x,cy:q.y,r,fill:c,stroke:"#fff","stroke-width":2,"pointer-events":handle?"none":"auto"});
+  svg.append(e);
+};
+ if(p.reachable){line(p.baseA,p.elbowA,"#16b5d1",4);line(p.elbowA,p.pen,"#16b5d1",3);line(p.baseB,p.elbowB,"#e2a352",4);line(p.elbowB,p.pen,"#e2a352",3);circle(p.pen,"#f05e77",14,"pen");}
+ circle(p.baseA,"#16b5d1",13,"originA");circle(p.baseB,"#e2a352",13,"originB");
+ circle(p.elbowA,"#16b5d1",12,"A");circle(p.elbowB,"#e2a352",12,"B");
+ $("machine-panel").hidden=view==="art";
+ $("machine-panel").classList.toggle("full",view==="mechanism");
+ $("art-panel").hidden=view==="mechanism";
+ $("art-panel").classList.toggle("full",view==="art");
  const paths=trace.length>1?[trace]:[];
- const result=simulate();
- if(view!=="mechanism")paths.push(...result.paths);
+ const result=simulationCache&&(drag||playing)?simulationCache:simulate();
+ if(view==="art")paths.push(...result.paths);
  const art=$("art");art.replaceChildren();
  for(const path of paths){if(path.length<2)continue;art.append(node("path",{d:path.map((q,i)=>(i?"L":"M")+q.x.toFixed(3)+" "+q.y.toFixed(3)).join(" "),fill:"none",stroke:"#204d68","stroke-width":.55,"stroke-linejoin":"round","stroke-linecap":"round"}));}
  $("status").textContent=(blocked?"Motion stopped at reachability boundary. ":"Arms connected. ")+
@@ -43,10 +52,10 @@ function draw(){
  return result;
 }
 function simulate(){
- const duration=2*Math.PI,segments=1200,paths=[];let points=[],count=0,complete=true;
+ const duration=2*Math.PI,segments=600,paths=[];let points=[],count=0,complete=true;
  let a=d.angleA,b=d.angleB;
  const first=solveFiveBar(d,a,b);
- if(!first.reachable||first.singular)return {paths:[],coverage:0,complete:false};
+ if(!first.reachable||first.singular)return simulationCache={paths:[],coverage:0,complete:false};
  points.push(first.pen);count++;
  for(let i=1;i<=segments;i++){
   const t=duration*i/segments,na=d.angleA+d.speedA*t,nb=d.angleB+d.speedB*t;
@@ -55,9 +64,9 @@ function simulate(){
   a=step.angleA;b=step.angleB;points.push(step.pose.pen);count++;
  }
  if(points.length>1)paths.push(points);
- return {paths,coverage:count/(segments+1),complete};
+ simulationCache={paths,coverage:count/(segments+1),complete};return simulationCache;
 }
-function stop(){playing=false;cancelAnimationFrame(raf);$("play").textContent="Animate";}
+function stop(){playing=false;cancelAnimationFrame(raf);$("play").textContent="Animate";last=0;}
 function frame(now){
  if(!playing)return;
  if(last){
@@ -69,7 +78,7 @@ function frame(now){
 }
 for(const [key] of keys)$(key).addEventListener("input",e=>{
  stop();const v=Number(e.target.value);
- if(key==="angleA"||key==="angleB"){updateAngles(key==="angleA"?v*RAD:d.angleA,key==="angleB"?v*RAD:d.angleB);trace=[];draw();}
+ if(key==="angleA"||key==="angleB"){updateAngles(key==="angleA"?v*RAD:d.angleA,key==="angleB"?v*RAD:d.angleB);trace=[];simulationCache=null;draw();}
  else {change({[key]:v});e.target.value=d[key];draw();}
 });
 // Inverse kinematics for dragging the shared pen: intersect each motor's
@@ -105,15 +114,44 @@ function dragPen(target){
  if(!accepted){blocked=true;return;}
  }
 }
-$("machine").addEventListener("pointerdown",e=>{
- const h=e.target.dataset.handle;if(!h)return;
- stop();drag=h;$("machine").setPointerCapture(e.pointerId);e.preventDefault();
-});
-$("machine").addEventListener("pointermove",e=>{
- if(!drag)return;
- const svg=$("machine"),point=svg.createSVGPoint();point.x=e.clientX;point.y=e.clientY;
- const matrix=svg.getScreenCTM();if(!matrix)return;
- const p=point.matrixTransform(matrix.inverse());
+// iPad Safari: large physical touch targets, capture on the stable SVG element,
+// and use screen-space hit testing instead of relying on tiny SVG circle targets.
+const machine=$("machine");
+machine.style.touchAction="none";
+let activePointer=null,dragOffset={x:0,y:0};
+function eventPoint(e){
+ const matrix=machine.getScreenCTM();if(!matrix)return null;
+ const point=machine.createSVGPoint();point.x=e.clientX;point.y=e.clientY;
+ return point.matrixTransform(matrix.inverse());
+}
+function closestHandle(e){
+ const pose=current();if(!pose.reachable)return null;
+ const handles=[
+  ["pen",pose.pen],["originA",pose.baseA],["originB",pose.baseB],
+  ["A",pose.elbowA],["B",pose.elbowB]
+ ];
+ const matrix=machine.getScreenCTM();if(!matrix)return null;
+ let best=null,dist=38;
+ for(const [name,p] of handles){
+  const pt=machine.createSVGPoint();pt.x=p.x;pt.y=p.y;
+  const client=pt.matrixTransform(matrix);
+  const delta=Math.hypot(client.x-e.clientX,client.y-e.clientY);
+  if(delta<dist){best=name;dist=delta;}
+ }
+ return best;
+}
+function startDrag(e){
+ if(activePointer!==null)return;
+ const h=closestHandle(e);if(!h)return;
+ stop();drag=h;activePointer=e.pointerId;
+ try{machine.setPointerCapture(e.pointerId);}catch{}
+ e.preventDefault();
+ $("status").textContent="Dragging "+({originA:"Motor A origin",originB:"Motor B origin",A:"Arm A elbow",B:"Arm B elbow",pen:"shared pen"}[h])+" — move your finger.";
+}
+function moveDrag(e){
+ if(drag===null||activePointer!==e.pointerId)return;
+ const p=eventPoint(e);if(!p)return;
+ e.preventDefault();
  if(drag==="originA"||drag==="originB"){
   const suffix=drag==="originA"?"A":"B";
   const xKey=suffix==="A"?"motorAX":"motorBX",yKey=suffix==="A"?"motorAY":"motorBY";
@@ -127,14 +165,21 @@ $("machine").addEventListener("pointermove",e=>{
   updateAngles(d.angleA+(drag==="A"?delta:0),d.angleB+(drag==="B"?delta:0));
  }
  trace=[];draw();
-});
-$("machine").addEventListener("pointerup",()=>drag=null);
-$("machine").addEventListener("pointercancel",()=>drag=null);
+}
+function endDrag(e){
+ if(activePointer!==null&&e.pointerId!==activePointer)return;
+ drag=null;activePointer=null;simulationCache=null;draw();
+}
+machine.addEventListener("pointerdown",startDrag,{passive:false});
+machine.addEventListener("pointermove",moveDrag,{passive:false});
+machine.addEventListener("pointerup",endDrag);
+machine.addEventListener("pointercancel",endDrag);
+machine.addEventListener("lostpointercapture",endDrag);
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{view=b.dataset.view;document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("active",x===b));draw();}));
-document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{stop();const settings=b.dataset.preset==="balanced"?{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,angleA:120*RAD,angleB:60*RAD,speedA:2,speedB:-2}:{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,crankA:32,crankB:55,couplerA:110,couplerB:95,angleA:120*RAD,angleB:60*RAD,speedA:2.2,speedB:-3.4};d=settings;trace=[];blocked=false;draw();}));
+document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{stop();const settings=b.dataset.preset==="balanced"?{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,angleA:120*RAD,angleB:60*RAD,speedA:2,speedB:-2}:{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,crankA:32,crankB:55,couplerA:110,couplerB:95,angleA:120*RAD,angleB:60*RAD,speedA:2.2,speedB:-3.4};d=settings;trace=[];blocked=false;simulationCache=null;draw();}));
 $("play").addEventListener("click",()=>{if(playing){stop();return;}playing=true;last=0;trace=[];$("play").textContent="Pause";raf=requestAnimationFrame(frame);});
-$("branch").addEventListener("click",()=>{stop();d={...d,branch:-d.branch};trace=[];draw();});
-$("fit").addEventListener("click",()=>{stop();const scan=scanMotorSeparation(d,{min:60,max:200,step:5,segments:200});const mid=(d.motorAX+d.motorBX)/2;const candidate={...d,baseSeparation:scan.best.separation,motorAX:mid-scan.best.separation/2,motorBX:mid+scan.best.separation/2};if(solveFiveBar(candidate).reachable){d=candidate;trace=[];draw();}});
+$("branch").addEventListener("click",()=>{stop();d={...d,branch:-d.branch};trace=[];simulationCache=null;draw();});
+$("fit").addEventListener("click",()=>{stop();const scan=scanMotorSeparation(d,{min:60,max:200,step:5,segments:200});const mid=(d.motorAX+d.motorBX)/2;const candidate={...d,baseSeparation:scan.best.separation,motorAX:mid-scan.best.separation/2,motorBX:mid+scan.best.separation/2};if(solveFiveBar(candidate).reachable){d=candidate;trace=[];simulationCache=null;draw();}});
 $("export").addEventListener("click",()=>{
  const result=simulate();if(!result.complete){alert("Incomplete trajectory cannot be exported as a continuous drawing.");return;}
  const pts=result.paths.flat(),minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x)),minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
