@@ -4,12 +4,13 @@ const EPS=1e-9;
 export const DEFAULT_FIVE_BAR=Object.freeze({
   baseSeparation:120, crankA:45, crankB:45, couplerA:100, couplerB:100,
   angleA:2.1, angleB:1.04, speedA:2, speedB:-3, phaseA:0, phaseB:0,
-  branch:1, motorAX:-60, motorAY:0, motorBX:60, motorBY:0
+  branch:1
 });
 function positive(x,name){if(typeof x!=="number"||!Number.isFinite(x)||x<=0)throw new RangeError(name+" must be positive");}
 export function validateFiveBar(d){
  for(const key of ["baseSeparation","crankA","crankB","couplerA","couplerB"])positive(d[key],key);
- for(const key of ["angleA","angleB","speedA","speedB","phaseA","phaseB","motorAX","motorAY","motorBX","motorBY"])if(typeof d[key]!=="number"||!Number.isFinite(d[key]))throw new RangeError(key+" must be finite");
+ for(const key of ["angleA","angleB","speedA","speedB","phaseA","phaseB"])if(typeof d[key]!=="number"||!Number.isFinite(d[key]))throw new RangeError(key+" must be finite");
+ for(const key of ["motorAX","motorAY","motorBX","motorBY"])if(d[key]!==undefined&&(typeof d[key]!=="number"||!Number.isFinite(d[key])))throw new RangeError(key+" must be finite");
  if(d.branch!==1&&d.branch!==-1)throw new RangeError("branch must be +1 or -1");
  return d;
 }
