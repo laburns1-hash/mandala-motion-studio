@@ -6,7 +6,20 @@ const node=(tag,attrs={})=>{const e=document.createElementNS(NS,tag);for(const [
 const controls=$("controls");
 for(const [key,label,min,max,step] of keys){const box=document.createElement("label"),span=document.createElement("span"),input=document.createElement("input");span.textContent=label;input.type="range";input.min=min;input.max=max;input.step=step;input.id=key;box.append(span,input);controls.append(box);}
 function current(){return solveFiveBar(d);}
-function change(patch){const next={...d,...patch};const pose=solveFiveBar(next);if(!pose.reachable||pose.singular){blocked=true;return false;}d=next;blocked=false;trace=[];draw();return true;}
+function change(patch){
+ const start={...d},end={...d,...patch};
+ const distance=Math.max(...Object.keys(patch).map(k=>Math.abs(end[k]-start[k])));
+ const steps=Math.max(1,Math.ceil(distance/1));
+ let accepted=start,hitLimit=false;
+ for(let i=1;i<=steps;i++){
+  const t=i/steps,candidate={...start};
+  for(const key of Object.keys(patch))candidate[key]=start[key]+(end[key]-start[key])*t;
+  const pose=solveFiveBar(candidate);
+  if(!pose.reachable||pose.singular){hitLimit=true;break;}
+  accepted=candidate;
+ }
+ d=accepted;blocked=hitLimit;trace=[];draw();return !hitLimit;
+}
 function updateAngles(a,b){const r=advanceFiveBar(d,d.angleA,d.angleB,a,b,{maxAngleStep:.008});d={...d,angleA:r.angleA,angleB:r.angleB};blocked=r.blocked;return r;}
 function draw(){
  for(const [key] of keys){const input=$(key);if(document.activeElement!==input)input.value=key.startsWith("angle")?Math.round(d[key]/RAD):d[key];}
@@ -57,7 +70,7 @@ function frame(now){
 for(const [key] of keys)$(key).addEventListener("input",e=>{
  stop();const v=Number(e.target.value);
  if(key==="angleA"||key==="angleB"){updateAngles(key==="angleA"?v*RAD:d.angleA,key==="angleB"?v*RAD:d.angleB);trace=[];draw();}
- else if(!change({[key]:v})){e.target.value=d[key];draw();}
+ else change({[key]:v});e.target.value=d[key];draw();
 });
 // Inverse kinematics for dragging the shared pen: intersect each motor's
 // crank circle with the circle of elbow locations around the requested pen.
@@ -70,20 +83,26 @@ function elbowAnglesForPen(target,motor,rCrank,rCoupler,currentAngle){
  return [direction+offset,direction-offset].map(angle=>currentAngle+Math.atan2(Math.sin(angle-currentAngle),Math.cos(angle-currentAngle)));
 }
 function dragPen(target){
- const aOptions=elbowAnglesForPen(target,{x:d.motorAX,y:d.motorAY},d.crankA,d.couplerA,d.angleA);
- const bOptions=elbowAnglesForPen(target,{x:d.motorBX,y:d.motorBY},d.crankB,d.couplerB,d.angleB);
+ const from=solveFiveBar(d);if(!from.reachable)return;
+ const travel=Math.hypot(target.x-from.pen.x,target.y-from.pen.y);
+ const steps=Math.max(1,Math.ceil(travel/2));
+ for(let k=1;k<=steps;k++){
+ const aim={x:from.pen.x+(target.x-from.pen.x)*k/steps,y:from.pen.y+(target.y-from.pen.y)*k/steps};
+ const aOptions=elbowAnglesForPen(aim,{x:d.motorAX,y:d.motorAY},d.crankA,d.couplerA,d.angleA);
+ const bOptions=elbowAnglesForPen(aim,{x:d.motorBX,y:d.motorBY},d.crankB,d.couplerB,d.angleB);
  const candidates=[];
  for(const a of aOptions)for(const b of bOptions){
   const pose=solveFiveBar(d,a,b);
-  if(!pose.reachable||pose.singular||Math.hypot(pose.pen.x-target.x,pose.pen.y-target.y)>.05)continue;
+  if(!pose.reachable||pose.singular||Math.hypot(pose.pen.x-aim.x,pose.pen.y-aim.y)>.05)continue;
   candidates.push({a,b,score:Math.hypot(a-d.angleA,b-d.angleB)});
  }
  candidates.sort((a,b)=>a.score-b.score);
  for(const candidate of candidates){
   const step=advanceFiveBar(d,d.angleA,d.angleB,candidate.a,candidate.b,{maxAngleStep:.006});
-  if(step.accepted){d={...d,angleA:step.angleA,angleB:step.angleB};blocked=false;return;}
+  if(step.accepted){d={...d,angleA:step.angleA,angleB:step.angleB};blocked=false;break;}
  }
- blocked=true;
+ if(blocked||!candidates.length){blocked=true;return;}
+ }
 }
 $("machine").addEventListener("pointerdown",e=>{
  const h=e.target.dataset.handle;if(!h)return;
