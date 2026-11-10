@@ -73,3 +73,28 @@ export function advanceFiveBar(d,fromA,fromB,toA,toB,{maxAngleStep=0.01,clearanc
  }
  return {accepted:true,blocked:false,angleA:toA,angleB:toB,pose:last};
 }
+
+/** Estimate usable motor separation for a specified motion, without assuming
+ * that a wider base is always better. Scores are the proportion of sampled
+ * motor poses that remain reachable and nonsingular. */
+export function scanMotorSeparation(d,{min=60,max=200,step=5,duration=2*Math.PI,segments=240}={}){
+ validateFiveBar(d);
+ if(![min,max,step,duration].every(Number.isFinite)||min<=0||max<min||step<=0||duration<=0||!Number.isInteger(segments)||segments<2||segments>20000)throw new RangeError("Invalid separation scan");
+ const count=Math.floor((max-min)/step)+1;
+ if(count>2000)throw new RangeError("Too many separation candidates");
+ const results=[];
+ for(let j=0;j<count;j++){
+  const separation=min+j*step;
+  const candidate={...d,baseSeparation:separation};
+  let reachable=0,singular=0;
+  for(let i=0;i<=segments;i++){
+   const t=duration*i/segments;
+   const p=solveFiveBar(candidate,d.angleA+d.phaseA+d.speedA*t,d.angleB+d.phaseB+d.speedB*t);
+   if(p.reachable&&!p.singular)reachable++;
+   if(p.singular)singular++;
+  }
+  results.push({separation,coverage:reachable/(segments+1),singular});
+ }
+ results.sort((a,b)=>b.coverage-a.coverage||a.singular-b.singular||Math.abs(a.separation-d.baseSeparation)-Math.abs(b.separation-d.baseSeparation));
+ return {best:results[0],candidates:results};
+}
