@@ -1,6 +1,6 @@
 import {DEFAULT_FIVE_BAR,solveFiveBar,advanceFiveBar,scanMotorSeparation} from "./five-bar.js";
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg",RAD=Math.PI/180;
-let d={...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,angleA:120*RAD,angleB:60*RAD,speedB:-2},view="mechanism",playing=false,last=0,raf=0,drag=null,trace=[],blocked=false,simulationCache=null;
+let d={...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,crankA:30,crankB:36,couplerA:110,couplerB:110,angleA:120*RAD,angleB:60*RAD,speedA:1,speedB:-9/7},view="mechanism",playing=false,last=0,raf=0,drag=null,trace=[],blocked=false,simulationCache=null,revolutions=7;
 const keys=[["motorAX","Motor A · X",-150,150,5],["motorAY","Motor A · Y",-120,120,5],["motorBX","Motor B · X",-150,150,5],["motorBY","Motor B · Y",-120,120,5],["crankA","Crank A",10,90,1],["crankB","Crank B",10,90,1],["couplerA","Coupler A",40,160,1],["couplerB","Coupler B",40,160,1],["speedA","Motor A speed",-6,6,.05],["speedB","Motor B speed",-6,6,.05],["angleA","Motor A angle",-180,180,1],["angleB","Motor B angle",-180,180,1]];
 const node=(tag,attrs={})=>{const e=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v));return e;};
 const controls=$("controls");
@@ -22,6 +22,8 @@ function change(patch){
 }
 function updateAngles(a,b){const r=advanceFiveBar(d,d.angleA,d.angleB,a,b,{maxAngleStep:.008});d={...d,angleA:r.angleA,angleB:r.angleB};blocked=r.blocked;return r;}
 function draw(){
+ $("revolution-value").textContent=revolutions;
+ $("revolutions").value=revolutions;
  for(const [key] of keys){const input=$(key);if(document.activeElement!==input)input.value=key.startsWith("angle")?Math.round(d[key]/RAD):d[key];}
  const p=current(),svg=$("machine");svg.replaceChildren();
  const line=(a,b,c,w)=>svg.append(node("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:c,"stroke-width":w,"stroke-linecap":"round"}));
@@ -38,33 +40,42 @@ function draw(){
  $("machine-panel").classList.toggle("full",view==="mechanism");
  $("art-panel").hidden=view==="mechanism";
  $("art-panel").classList.toggle("full",view==="art");
- const paths=trace.length>1?[trace]:[];
- const result=simulationCache&&(drag||playing)?simulationCache:simulate();
- if(view==="art")paths.push(...result.paths);
+ const paths=[];
+ if(view==="live"&&trace.length>1)paths.push(trace);
+ const result=view==="art"?simulate():null;
+ if(result)paths.push(...result.paths);
  const art=$("art");art.replaceChildren();
  for(const path of paths){if(path.length<2)continue;art.append(node("path",{d:path.map((q,i)=>(i?"L":"M")+q.x.toFixed(3)+" "+q.y.toFixed(3)).join(" "),fill:"none",stroke:"#204d68","stroke-width":.55,"stroke-linejoin":"round","stroke-linecap":"round"}));}
- $("status").textContent=(blocked?"Motion stopped at reachability boundary. ":"Arms connected. ")+
-  (view==="live"?"Live pen trace. ":"")+
-  "Full planned trajectory: "+Math.round(result.coverage*100)+"% reachable. "+
-  (result.complete?"Complete path.":"Incomplete — export disabled.");
- $("export").disabled=!result.complete||view==="live";
+ $("status").textContent=(blocked?"Movement stopped at reachability boundary. ":"Five-bar linkage connected. ")+
+  (view==="art"?"Preview: "+Math.round(result.coverage*100)+"% of "+revolutions+" motor A revolutions reachable. "+(result.complete?"Complete drawing — SVG ready.":"Motion stops at unreachable position; export disabled."):
+   view==="live"?"Drawing the actual traced path.":"Drag blue/amber pivots, elbows, or the red shared pen.");
+ $("export").disabled=view==="live"||(result&&!result.complete);
  $("fit").disabled=playing;
  return result;
 }
 function simulate(){
- const duration=2*Math.PI,segments=600,paths=[];let points=[],count=0,complete=true;
+ const signature=JSON.stringify([d,revolutions]);
+ if(simulationCache&&simulationCache.signature===signature)return simulationCache;
+ // Revolutions are counted for motor A; the speed ratio determines how many
+ // rotations motor B makes. This enables true multi-loop closed patterns.
+ const speed=Math.abs(d.speedA);
+ if(speed<.0001)return simulationCache={signature,paths:[],coverage:0,complete:false};
+ const duration=2*Math.PI*revolutions/speed;
+ const segments=Math.min(9000,Math.max(600,Math.ceil(
+  90*revolutions*Math.max(1,Math.abs(d.speedB/d.speedA)))));
+ const paths=[];let points=[],count=0,complete=true;
  let a=d.angleA,b=d.angleB;
  const first=solveFiveBar(d,a,b);
- if(!first.reachable||first.singular)return simulationCache={paths:[],coverage:0,complete:false};
+ if(!first.reachable||first.singular)return simulationCache={signature,paths:[],coverage:0,complete:false};
  points.push(first.pen);count++;
  for(let i=1;i<=segments;i++){
   const t=duration*i/segments,na=d.angleA+d.speedA*t,nb=d.angleB+d.speedB*t;
-  const step=advanceFiveBar(d,a,b,na,nb,{maxAngleStep:.02});
+  const step=advanceFiveBar(d,a,b,na,nb,{maxAngleStep:.04});
   if(step.blocked){complete=false;break;}
   a=step.angleA;b=step.angleB;points.push(step.pose.pen);count++;
  }
  if(points.length>1)paths.push(points);
- simulationCache={paths,coverage:count/(segments+1),complete};return simulationCache;
+ return simulationCache={signature,paths,coverage:count/(segments+1),complete};
 }
 function stop(){playing=false;cancelAnimationFrame(raf);$("play").textContent="Animate";last=0;}
 function frame(now){
@@ -176,7 +187,23 @@ machine.addEventListener("pointerup",endDrag);
 machine.addEventListener("pointercancel",endDrag);
 machine.addEventListener("lostpointercapture",endDrag);
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{view=b.dataset.view;document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("active",x===b));draw();}));
-document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{stop();const settings=b.dataset.preset==="balanced"?{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,angleA:120*RAD,angleB:60*RAD,speedA:2,speedB:-2}:{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,crankA:32,crankB:55,couplerA:110,couplerB:95,angleA:120*RAD,angleB:60*RAD,speedA:2.2,speedB:-3.4};d=settings;trace=[];blocked=false;simulationCache=null;draw();}));
+const patterns={
+ "5-7":{revolutions:5,speedA:1,speedB:-7/5},
+ "7-9":{revolutions:7,speedA:1,speedB:-9/7},
+ "11-13":{revolutions:11,speedA:1,speedB:-13/11},
+ "13-17":{revolutions:13,speedA:1,speedB:-17/13}
+};
+$("revolutions").addEventListener("input",e=>{
+ stop();revolutions=Number(e.target.value);simulationCache=null;draw();
+});
+document.querySelectorAll("[data-pattern]").forEach(b=>b.addEventListener("click",()=>{
+ stop();const p=patterns[b.dataset.pattern];revolutions=p.revolutions;
+ d={...d,speedA:p.speedA,speedB:p.speedB};trace=[];blocked=false;
+ simulationCache=null;view="art";
+ document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("active",x.dataset.view===view));
+ draw();
+}));
+document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{stop();const settings=b.dataset.preset==="balanced"?{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,crankA:30,crankB:36,couplerA:110,couplerB:110,angleA:120*RAD,angleB:60*RAD,speedA:1,speedB:-9/7}:{...DEFAULT_FIVE_BAR,motorAX:-60,motorAY:0,motorBX:60,motorBY:0,crankA:28,crankB:49,couplerA:115,couplerB:105,angleA:120*RAD,angleB:60*RAD,speedA:1,speedB:-13/11};d=settings;revolutions=b.dataset.preset==="balanced"?7:11;trace=[];blocked=false;simulationCache=null;draw();}));
 $("play").addEventListener("click",()=>{if(playing){stop();return;}playing=true;last=0;trace=[];$("play").textContent="Pause";raf=requestAnimationFrame(frame);});
 $("branch").addEventListener("click",()=>{stop();d={...d,branch:-d.branch};trace=[];simulationCache=null;draw();});
 $("fit").addEventListener("click",()=>{stop();const scan=scanMotorSeparation(d,{min:60,max:200,step:5,segments:200});const mid=(d.motorAX+d.motorBX)/2;const candidate={...d,baseSeparation:scan.best.separation,motorAX:mid-scan.best.separation/2,motorBX:mid+scan.best.separation/2};if(solveFiveBar(candidate).reachable){d=candidate;trace=[];simulationCache=null;draw();}});
